@@ -75,23 +75,40 @@ class SpiderFootHelpers():
        Eventually split this class into separate files.
     """
 
+    """
     @staticmethod
     def dataPath() -> str:
-        """Returns the file system location of SpiderFoot data and configuration files.
-
-        Returns:
-            str: SpiderFoot data file system path
-        """
+        
         path = os.environ.get('SPIDERFOOT_DATA')
         if not path:
             path = f"{Path.home()}/.spiderfoot/"
         if not os.path.isdir(path):
             os.makedirs(path, exist_ok=True)
         return path
+    
+    """
+    @staticmethod
+    def dataPath() -> str:
+        """Returns the path to the Prisma database directory.
+
+        Returns:
+            str: Absolute path to the Prisma database directory
+
+        Raises:
+            OSError: If the Prisma database directory does not exist or cannot be accessed
+        """
+        # Use os.path.normpath to ensure correct path separators for the current OS
+        db_path = os.path.normpath("D:/work/GarduanBytes/server/admin-server/src/datastore/prisma")
+        
+        # Check if directory exists
+        if not os.path.isdir(db_path):
+            raise OSError(f"Prisma database directory not found at: {db_path}")
+            
+        return db_path
 
     @staticmethod
     def cachePath() -> str:
-        """Returns the file system location of the cacha data files.
+        """Returns the file system location of the cache data files.
 
         Returns:
             str: SpiderFoot cache file system path

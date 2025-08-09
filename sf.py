@@ -17,6 +17,7 @@ import multiprocessing as mp
 import os
 import os.path
 import random
+import re
 import signal
 import sys
 import time
@@ -113,6 +114,7 @@ def main() -> None:
     p.add_argument("-q", action='store_true', help="Disable logging. This will also hide errors!")
     p.add_argument("-V", "--version", action='store_true', help="Display the version of SpiderFoot and exit.")
     p.add_argument("-max-threads", type=int, help="Max number of modules to run concurrently.")
+    p.add_argument("--scan-id", type=str, help="Specify a custom scan instance ID instead of auto-generating one.")
     args = p.parse_args()
 
     if args.version:
@@ -426,7 +428,24 @@ def start_scan(sfConfig: dict, sfModules: dict, args, loggingQueue) -> None:
 
     # Start running a new scan
     scanName = target
-    scanId = SpiderFootHelpers.genScanInstanceId()
+    if args.scan_id:
+        # Validate scan ID format (alphanumeric and some special characters)
+        if not re.match(r'^[a-zA-Z0-9_-]+$', args.scan_id):
+            log.error("Invalid scan ID format. Use only alphanumeric characters, underscores, and hyphens.")
+            sys.exit(-1)
+        
+        # Check if scan ID already exists
+        existing_scan = dbh.scanInstanceGet(args.scan_id)
+        if existing_scan:
+            log.error(f"Scan ID '{args.scan_id}' already exists. Choose a different ID or let it auto-generate.")
+            sys.exit(-1)
+            
+        scanId = args.scan_id
+        log.info(f"Using custom scan ID: {scanId}")
+    else:
+        scanId = SpiderFootHelpers.genScanInstanceId()
+        log.info(f"Generated scan ID: {scanId}")
+    
     try:
         p = mp.Process(target=startSpiderFootScanner, args=(loggingQueue, scanName, scanId, target, targetType, modlist, cfg))
         p.daemon = True
