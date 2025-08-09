@@ -35,6 +35,8 @@ from spiderfoot import SpiderFootDb
 from spiderfoot import SpiderFootCorrelator
 from spiderfoot.logger import logListenerSetup, logWorkerSetup
 from spiderfoot import __version__
+from spiderfoot.pubsub import notify_scan_failed, notify_scan_started, notify_scan_completed_with_results
+from spiderfoot.db_monitor import start_scan_monitoring, stop_scan_monitoring
 
 scanId = None
 dbh = None
@@ -99,6 +101,7 @@ def main() -> None:
     p.add_argument("-M", "--modules", action='store_true', help="List available modules.")
     p.add_argument("-C", "--correlate", metavar="scanID", help="Run correlation rules against a scan ID.")
     p.add_argument("-s", metavar="TARGET", help="Target for the scan.")
+    p.add_argument("--target-name", type=str, help="Custom name/label for the target (useful for identification in databases).")
     p.add_argument("-t", metavar="type1,type2,...", type=str, help="Event types to collect (modules selected automatically).")
     p.add_argument("-u", choices=["all", "footprint", "investigate", "passive"], type=str, help="Select modules automatically by use case")
     p.add_argument("-T", "--types", action='store_true', help="List available event types.")
@@ -427,7 +430,7 @@ def start_scan(sfConfig: dict, sfModules: dict, args, loggingQueue) -> None:
         print(headers)
 
     # Start running a new scan
-    scanName = target
+    scanName = args.target_name if args.target_name else target
     if args.scan_id:
         # Validate scan ID format (alphanumeric and some special characters)
         if not re.match(r'^[a-zA-Z0-9_-]+$', args.scan_id):
@@ -446,12 +449,20 @@ def start_scan(sfConfig: dict, sfModules: dict, args, loggingQueue) -> None:
         scanId = SpiderFootHelpers.genScanInstanceId()
         log.info(f"Generated scan ID: {scanId}")
     
+    # Send notification that scan is starting
+    notify_scan_started(scanId, target, scanName)
+    
     try:
         p = mp.Process(target=startSpiderFootScanner, args=(loggingQueue, scanName, scanId, target, targetType, modlist, cfg))
         p.daemon = True
         p.start()
+        
+        # Start real-time monitoring of the scan
+        start_scan_monitoring(cfg, scanId, target, scanName)
+        
     except BaseException as e:
         log.error(f"Scan [{scanId}] failed: {e}")
+        notify_scan_failed(scanId, target, scanName, status="ERROR-FAILED", error=str(e))
         sys.exit(-1)
 
     # Poll for scan status until completion
@@ -466,7 +477,37 @@ def start_scan(sfConfig: dict, sfModules: dict, args, loggingQueue) -> None:
             p.join(timeout=timeout)
             if (p.is_alive()):
                 log.error(f"Timeout reached ({timeout}s) waiting for scan {scanId} post-processing to complete.")
+                stop_scan_monitoring()
                 sys.exit(-1)
+
+            # Stop real-time monitoring
+            stop_scan_monitoring()
+
+            # Get scan results for notification
+            scan_results = {}
+            total_findings = 0
+            
+            try:
+                # Get scan results summary by type
+                summary_results = dbh.scanResultSummary(scanId, "type")
+                
+                # Convert summary to event count dictionary
+                for result in summary_results:
+                    event_type = result[0]  # Event type is first column
+                    count = result[3]       # Count is fourth column (total count)
+                    scan_results[event_type] = count
+                    total_findings += count
+                
+                log.info(f"Scan {scanId} found {total_findings} total events across {len(scan_results)} event types")
+                
+                # Send detailed completion notification
+                notify_scan_completed_with_results(scanId, target, scanName, info[5], scan_results)
+                
+            except Exception as e:
+                log.error(f"Error getting scan results for notification: {e}")
+                # Fallback to basic notification
+                from spiderfoot.pubsub import notify_scan_completed
+                notify_scan_completed(scanId, info[5], total_findings)
 
             if sfConfig['__logging']:
                 log.info(f"Scan completed with status {info[5]}")
