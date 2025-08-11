@@ -98,13 +98,12 @@ class SpiderFootHelpers():
             OSError: If the Prisma database directory does not exist or cannot be accessed
         """
         # Use os.path.normpath to ensure correct path separators for the current OS
-        db_path = os.path.normpath("D:/work/GarduanBytes/server/admin-server/src/datastore/prisma")
-        
-        # Check if directory exists
-        if not os.path.isdir(db_path):
-            raise OSError(f"Prisma database directory not found at: {db_path}")
-            
-        return db_path
+        path = os.environ.get('SPIDERFOOT_DATA')
+        if not path:
+            path = f"{Path.home()}/.spiderfoot/"
+        if not os.path.isdir(path):
+            os.makedirs(path, exist_ok=True)
+        return path
 
     @staticmethod
     def cachePath() -> str:
