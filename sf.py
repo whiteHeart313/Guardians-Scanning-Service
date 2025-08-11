@@ -118,6 +118,7 @@ def main() -> None:
     p.add_argument("-V", "--version", action='store_true', help="Display the version of SpiderFoot and exit.")
     p.add_argument("-max-threads", type=int, help="Max number of modules to run concurrently.")
     p.add_argument("--scan-id", type=str, help="Specify a custom scan instance ID instead of auto-generating one.")
+    p.add_argument("--user-id", type=str, help="User ID to associate with this scan for tracking and notifications.")
     args = p.parse_args()
 
     if args.version:
@@ -450,7 +451,8 @@ def start_scan(sfConfig: dict, sfModules: dict, args, loggingQueue) -> None:
         log.info(f"Generated scan ID: {scanId}")
     
     # Send notification that scan is starting
-    notify_scan_started(scanId, target, scanName)
+    user_id = args.user_id if args.user_id else "unknown"
+    notify_scan_started(scanId, target, scanName, user_id)
     
     try:
         p = mp.Process(target=startSpiderFootScanner, args=(loggingQueue, scanName, scanId, target, targetType, modlist, cfg))
@@ -458,11 +460,13 @@ def start_scan(sfConfig: dict, sfModules: dict, args, loggingQueue) -> None:
         p.start()
         
         # Start real-time monitoring of the scan
-        start_scan_monitoring(cfg, scanId, target, scanName)
+        user_id = args.user_id if args.user_id else "unknown"
+        start_scan_monitoring(cfg, scanId, target, scanName, user_id)
         
     except BaseException as e:
         log.error(f"Scan [{scanId}] failed: {e}")
-        notify_scan_failed(scanId, target, scanName, status="ERROR-FAILED", error=str(e))
+        user_id = args.user_id if args.user_id else "unknown"
+        notify_scan_failed(scanId, target, scanName, status="ERROR-FAILED", error=str(e), user_id=user_id)
         sys.exit(-1)
 
     # Poll for scan status until completion
@@ -501,7 +505,8 @@ def start_scan(sfConfig: dict, sfModules: dict, args, loggingQueue) -> None:
                 log.info(f"Scan {scanId} found {total_findings} total events across {len(scan_results)} event types")
                 
                 # Send detailed completion notification
-                notify_scan_completed_with_results(scanId, target, scanName, info[5], scan_results)
+                user_id = args.user_id if args.user_id else "unknown"
+                notify_scan_completed_with_results(scanId, target, scanName, info[5], scan_results, user_id)
                 
             except Exception as e:
                 log.error(f"Error getting scan results for notification: {e}")

@@ -85,11 +85,12 @@ class RedisPubSub:
 # Global instance
 _redis_pubsub = RedisPubSub()
 
-def notify_asset_scan_completed(asset_data: Dict[str, Any]) -> bool:
+def notify_asset_scan_completed(asset_data: Dict[str, Any], user_id: str = "unknown") -> bool:
     """Notify that an asset scan has been completed.
     
     Args:
         asset_data: Dictionary containing asset information with 'id' key
+        user_id: User ID associated with this scan
         
     Returns:
         bool: True if notification was sent successfully, False otherwise
@@ -101,6 +102,7 @@ def notify_asset_scan_completed(asset_data: Dict[str, Any]) -> bool:
     message = {
         'event': 'asset_scan_completed',
         'asset_id': asset_data['id'],
+        'user_id': user_id,
         'timestamp': time.time(),
         'data': asset_data
     }
@@ -108,7 +110,7 @@ def notify_asset_scan_completed(asset_data: Dict[str, Any]) -> bool:
     return _redis_pubsub.publish('asset_notifications', message)
 
 
-def notify_scan_failed(scan_id: str, target: str, scan_name: str, status: str = "ERROR-FAILED", error: str = None) -> bool:
+def notify_scan_failed(scan_id: str, target: str, scan_name: str, status: str = "ERROR-FAILED", error: str = None, user_id: str = "unknown") -> bool:
     """Notify that a scan has failed.
     
     Args:
@@ -117,6 +119,7 @@ def notify_scan_failed(scan_id: str, target: str, scan_name: str, status: str = 
         scan_name: Human readable scan name
         status: Failure status (ERROR-FAILED, ABORT-REQUESTED, etc.)
         error: Error message if available
+        user_id: User ID associated with this scan
         
     Returns:
         bool: True if notification was sent successfully
@@ -128,18 +131,20 @@ def notify_scan_failed(scan_id: str, target: str, scan_name: str, status: str = 
         'scan_name': scan_name,
         'status': status,
         'error': error,
+        'user_id': user_id,
         'timestamp': time.time()
     }
     
     return _redis_pubsub.publish('scan_notifications', message)
 
-def notify_scan_started(scan_id: str, target: str, scan_name: str) -> bool:
+def notify_scan_started(scan_id: str, target: str, scan_name: str, user_id: str = "unknown") -> bool:
     """Notify that a new scan has started.
     
     Args:
         scan_id: Unique scan identifier
         target: Scan target (email, domain, etc.)
         scan_name: Human readable scan name
+        user_id: User ID associated with this scan
         
     Returns:
         bool: True if notification was sent successfully
@@ -149,18 +154,20 @@ def notify_scan_started(scan_id: str, target: str, scan_name: str) -> bool:
         'scan_id': scan_id,
         'target': target,
         'scan_name': scan_name,
+        'user_id': user_id,
         'timestamp': time.time()
     }
     
     return _redis_pubsub.publish('scan_notifications', message)
 
-def notify_scan_completed(scan_id: str, status: str, results_count: int = 0) -> bool:
+def notify_scan_completed(scan_id: str, status: str, results_count: int = 0, user_id: str = "unknown") -> bool:
     """Notify that a scan has completed.
     
     Args:
         scan_id: Unique scan identifier
         status: Scan completion status (FINISHED, ERROR-FAILED, ABORTED)
         results_count: Number of results found
+        user_id: User ID associated with this scan
         
     Returns:
         bool: True if notification was sent successfully
@@ -170,12 +177,13 @@ def notify_scan_completed(scan_id: str, status: str, results_count: int = 0) -> 
         'scan_id': scan_id,
         'status': status,
         'results_count': results_count,
+        'user_id': user_id,
         'timestamp': time.time()
     }
     
     return _redis_pubsub.publish('scan_notifications', message)
 
-def notify_new_finding(scan_id: str, event_type: str, data: str, source: str) -> bool:
+def notify_new_finding(scan_id: str, event_type: str, data: str, source: str, user_id: str = "unknown") -> bool:
     """Notify about a new finding during scan.
     
     Args:
@@ -183,6 +191,7 @@ def notify_new_finding(scan_id: str, event_type: str, data: str, source: str) ->
         event_type: Type of event found (EMAILADDR, IP_ADDRESS, etc.)
         data: The actual data found
         source: Source module that found the data
+        user_id: User ID associated with this scan
         
     Returns:
         bool: True if notification was sent successfully
@@ -193,6 +202,7 @@ def notify_new_finding(scan_id: str, event_type: str, data: str, source: str) ->
         'event_type': event_type,
         'data': data,
         'source': source,
+        'user_id': user_id,
         'timestamp': time.time()
     }
     
@@ -258,7 +268,7 @@ def calculate_risk_status(scan_results: Dict[str, int]) -> str:
     else:
         return "MINIMAL"
 
-def notify_scan_completed_with_results(scan_id: str, target: str, scan_name: str, status: str, scan_results: Dict[str, int]) -> bool:
+def notify_scan_completed_with_results(scan_id: str, target: str, scan_name: str, status: str, scan_results: Dict[str, int], user_id: str = "unknown") -> bool:
     """Notify that a scan has completed with detailed results and risk assessment.
     
     Args:
@@ -267,6 +277,7 @@ def notify_scan_completed_with_results(scan_id: str, target: str, scan_name: str
         scan_name: Human readable scan name
         status: Scan completion status
         scan_results: Dictionary of event types and their counts
+        user_id: User ID associated with this scan
         
     Returns:
         bool: True if notification was sent successfully
@@ -283,6 +294,7 @@ def notify_scan_completed_with_results(scan_id: str, target: str, scan_name: str
         'total_findings': total_findings,
         'risk_status': risk_status,
         'results_breakdown': scan_results,
+        'user_id': user_id,
         'timestamp': time.time()
     }
     

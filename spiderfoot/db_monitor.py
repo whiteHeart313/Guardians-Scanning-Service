@@ -32,13 +32,14 @@ class SpiderFootDbMonitor:
         self.scan_status_cache = {}  # Cache scan statuses
         self.logger = logging.getLogger("spiderfoot.db_monitor")
         
-    def start_monitoring(self, scan_id: str, target: str, scan_name: str) -> None:
+    def start_monitoring(self, scan_id: str, target: str, scan_name: str, user_id: str = "unknown") -> None:
         """Start monitoring a specific scan.
         
         Args:
             scan_id: Scan ID to monitor
             target: Scan target
             scan_name: Human readable scan name
+            user_id: User ID associated with this scan
         """
         if self.monitoring:
             self.logger.warning(f"Already monitoring scan {scan_id}")
@@ -49,6 +50,7 @@ class SpiderFootDbMonitor:
         self.scan_status_cache[scan_id] = {
             'target': target,
             'scan_name': scan_name,
+            'user_id': user_id,
             'status': 'RUNNING',
             'event_counts': {}
         }
@@ -114,7 +116,9 @@ class SpiderFootDbMonitor:
                     if self._is_important_event(event_type):
                         self.logger.info(f"New {event_type} events found: {new_count}")
                         # For real-time notification, we'll send one notification per new event type
-                        notify_new_finding(scan_id, event_type, f"{new_count} new findings", "database_monitor")
+                        scan_cache = self.scan_status_cache.get(scan_id, {})
+                        user_id = scan_cache.get('user_id', 'unknown')
+                        notify_new_finding(scan_id, event_type, f"{new_count} new findings", "database_monitor", user_id)
             
             # Update cache with current counts
             if scan_id in self.scan_status_cache:
@@ -146,10 +150,11 @@ class SpiderFootDbMonitor:
             scan_cache = self.scan_status_cache.get(scan_id, {})
             target = scan_cache.get('target', 'Unknown')
             scan_name = scan_cache.get('scan_name', 'Unknown')
+            user_id = scan_cache.get('user_id', 'unknown')
             event_counts = scan_cache.get('event_counts', {})
             
             # Send detailed completion notification
-            notify_scan_completed_with_results(scan_id, target, scan_name, status, event_counts)
+            notify_scan_completed_with_results(scan_id, target, scan_name, status, event_counts, user_id)
             
             total_findings = sum(event_counts.values())
             risk_status = calculate_risk_status(event_counts)
@@ -183,7 +188,7 @@ class SpiderFootDbMonitor:
 # Global monitor instance
 _db_monitor: Optional[SpiderFootDbMonitor] = None
 
-def start_scan_monitoring(sf_config: Dict[str, Any], scan_id: str, target: str, scan_name: str) -> None:
+def start_scan_monitoring(sf_config: Dict[str, Any], scan_id: str, target: str, scan_name: str, user_id: str = "unknown") -> None:
     """Start monitoring a scan for real-time updates.
     
     Args:
@@ -191,6 +196,7 @@ def start_scan_monitoring(sf_config: Dict[str, Any], scan_id: str, target: str, 
         scan_id: Scan ID to monitor
         target: Scan target
         scan_name: Human readable scan name
+        user_id: User ID associated with this scan
     """
     global _db_monitor
     
@@ -198,7 +204,7 @@ def start_scan_monitoring(sf_config: Dict[str, Any], scan_id: str, target: str, 
         _db_monitor.stop_monitoring()
     
     _db_monitor = SpiderFootDbMonitor(sf_config)
-    _db_monitor.start_monitoring(scan_id, target, scan_name)
+    _db_monitor.start_monitoring(scan_id, target, scan_name, user_id)
 
 def stop_scan_monitoring() -> None:
     """Stop the current scan monitoring."""
